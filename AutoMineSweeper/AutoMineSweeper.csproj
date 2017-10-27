@@ -61,6 +61,7 @@
     <Compile Include="Cell.cs" />
     <Compile Include="Field.cs" />
     <Compile Include="ImageUtils.cs" />
+    <Compile Include="MemoryUtils.cs" />
     <Compile Include="Operator.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -26,8 +26,12 @@ namespace AutoMineSweeper
 
         public Dictionary<CellStatus, Bitmap> CellTemplates { get; set; } = new Dictionary<CellStatus, Bitmap>();
 
-        public Field()
+        private bool ReadMemory { get; set; }
+
+        public Field(bool readMemory)
         {
+            ReadMemory = readMemory;
+
             CellStart = new Point(13, 101);
             CellSize = new Size(16, 16);
 
@@ -35,6 +39,9 @@ namespace AutoMineSweeper
             MineCount = 99;
 
             ButtonRect = new Rectangle(240, 61, 26, 26);
+
+            BaseAddress = (IntPtr)0x01005361;
+            MemoryLineSize = 32;
 
             //create cells
             Cells = new Cell[CellCount.Width, CellCount.Height];
@@ -51,25 +58,26 @@ namespace AutoMineSweeper
             }
 
             //build neighbors
-
-            for (int i = 0; i < CellCount.Width; i++)
+            if (!ReadMemory)
             {
-                for (int j = 0; j < CellCount.Height; j++)
+                for (int i = 0; i < CellCount.Width; i++)
                 {
-                    var cell = GetCell(i, j);
-                    cell.Neighbors[Direction.TopLeft] = GetCell(i - 1, j - 1);
-                    cell.Neighbors[Direction.TopCenter] = GetCell(i, j - 1);
-                    cell.Neighbors[Direction.TopRight] = GetCell(i + 1, j - 1);
+                    for (int j = 0; j < CellCount.Height; j++)
+                    {
+                        var cell = GetCell(i, j);
+                        cell.Neighbors[Direction.TopLeft] = GetCell(i - 1, j - 1);
+                        cell.Neighbors[Direction.TopCenter] = GetCell(i, j - 1);
+                        cell.Neighbors[Direction.TopRight] = GetCell(i + 1, j - 1);
 
-                    cell.Neighbors[Direction.CenterLeft] = GetCell(i - 1, j);
-                    cell.Neighbors[Direction.CenterRight] = GetCell(i + 1, j);
+                        cell.Neighbors[Direction.CenterLeft] = GetCell(i - 1, j);
+                        cell.Neighbors[Direction.CenterRight] = GetCell(i + 1, j);
 
-                    cell.Neighbors[Direction.BottomLeft] = GetCell(i - 1, j + 1);
-                    cell.Neighbors[Direction.BottomCenter] = GetCell(i, j + 1);
-                    cell.Neighbors[Direction.BottomRight] = GetCell(i + 1, j + 1);
+                        cell.Neighbors[Direction.BottomLeft] = GetCell(i - 1, j + 1);
+                        cell.Neighbors[Direction.BottomCenter] = GetCell(i, j + 1);
+                        cell.Neighbors[Direction.BottomRight] = GetCell(i + 1, j + 1);
+                    }
                 }
             }
-
 
         }
 
@@ -84,6 +92,12 @@ namespace AutoMineSweeper
 
         public void Resolve()
         {
+            if (ReadMemory)
+            {
+                ResolveByReadMemory();
+                return;
+            }
+
             //load existing files in images folder
             foreach (CellStatus status in Enum.GetValues(typeof(CellStatus)))
             {
@@ -122,8 +136,8 @@ namespace AutoMineSweeper
                             if (cell.Status >= CellStatus._1 && cell.Status <= CellStatus._8)
                             {
                                 int flagCount = cell.GetCountInNeighbors(CellStatus.Flag);
-                                int unknownCount = cell.GetCountInNeighbors(CellStatus.Unknown);
-                                if (unknownCount > 0 && flagCount == (int)cell.Status)
+                                int idleCount = cell.GetCountInNeighbors(CellStatus.Idle);
+                                if (idleCount > 0 && flagCount == (int)cell.Status)
                                 {
                                     cell.DoubleClick();
                                     found = true;
@@ -147,12 +161,12 @@ namespace AutoMineSweeper
                             if (cell.Status >= CellStatus._1 && cell.Status <= CellStatus._8)
                             {
                                 int flagCount = cell.GetCountInNeighbors(CellStatus.Flag);
-                                int unknownCount = cell.GetCountInNeighbors(CellStatus.Unknown);
-                                if (unknownCount > 0 && flagCount + unknownCount == (int)cell.Status)
+                                int idleCount = cell.GetCountInNeighbors(CellStatus.Idle);
+                                if (idleCount > 0 && flagCount + idleCount == (int)cell.Status)
                                 {
                                     foreach (var neighbor in cell.Neighbors)
                                     {
-                                        if (neighbor.Value != null && neighbor.Value.Status == CellStatus.Unknown)
+                                        if (neighbor.Value != null && neighbor.Value.Status == CellStatus.Idle)
                                         {
                                             neighbor.Value.RightClick();
                                             neighbor.Value.Status = CellStatus.Flag;
@@ -173,7 +187,7 @@ namespace AutoMineSweeper
                         int j = random.Next(0, CellCount.Height);
 
                         var cell = GetCell(i, j);
-                        if (cell.Status == CellStatus.Unknown)
+                        if (cell.Status == CellStatus.Idle)
                         {
                             cell.LeftClick();
                         }
@@ -228,6 +242,55 @@ namespace AutoMineSweeper
         private void ClickStartButton()
         {
             Operator.Instance.LeftClick(ButtonRect.Center().X, ButtonRect.Center().Y);
+        }
+
+        private IntPtr BaseAddress;
+
+        private UInt32 MemoryLineSize;
+
+        [Flags]
+        public enum CellMemoryFlags : uint
+        {
+            HighIdle = 0x00,
+            HighOpen = 0x40,
+            HighMine = 0x80,
+            HighTriggered = 0xC0,
+
+            //Low 0 ~ 8 is Mine count in neighbors
+
+            //in case of game over
+            LowMineIdle = 0x0A,
+            LowWrong = 0x0B,
+            LowTriggered = 0x0C,
+
+            //in case of playing
+            LowQuestion = 0x0D,
+            LowFlag = 0x0E,
+            LowIdle = 0x0F,
+        }
+
+        public void ResolveByReadMemory()
+        {
+            ClickStartButton();
+
+            var hWnd = Operator.Instance.GetWindowsHandle();
+            var bytes = MemoryUtils.ReadProcessMemory(hWnd, BaseAddress, (UInt32)(this.CellCount.Width * MemoryLineSize));
+
+            for (int j = 0; j < CellCount.Height; j++)
+            {
+                for (int i = 0; i < CellCount.Width; i++)
+                {
+                    CellMemoryFlags cellFlag = (CellMemoryFlags)bytes[i + j * MemoryLineSize];
+                    
+                    if (cellFlag == (CellMemoryFlags.HighIdle | CellMemoryFlags.LowIdle))
+                    {
+                        var cell = GetCell(i, j);
+                        cell.LeftClick();
+                        //read again
+                        bytes = MemoryUtils.ReadProcessMemory(hWnd, BaseAddress, (UInt32)(this.CellCount.Width * MemoryLineSize));
+                    }
+                }
+            }
         }
     }
 }

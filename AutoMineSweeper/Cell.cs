@@ -19,7 +19,7 @@ namespace AutoMineSweeper
         Flag,
         Mine,
         Triggered,
-        Unknown,
+        Idle,
         Wrong
     }
 
@@ -47,19 +47,19 @@ namespace AutoMineSweeper
             }
         }
 
-        public CellStatus Status { get; set; } = CellStatus.Unknown;
+        public CellStatus Status { get; set; } = CellStatus.Idle;
 
         public Dictionary<Direction, Cell> Neighbors { get; private set; } = new Dictionary<Direction, Cell>();
 
         public void LeftClick()
         {
-            Debug.Assert(Status == CellStatus.Unknown);
+            Debug.Assert(Status == CellStatus.Idle);
             Operator.Instance.LeftClick(Center.X, Center.Y);
         }
 
         public void RightClick()
         {
-            Debug.Assert(Status == CellStatus.Unknown);
+            Debug.Assert(Status == CellStatus.Idle);
             Operator.Instance.RightClick(Center.X, Center.Y);
         }
 

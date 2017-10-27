@@ -93,5 +93,10 @@ namespace AutoMineSweeper
             }
             return screenshot;
         }
+
+        public IntPtr GetWindowsHandle()
+        {
+            return (IntPtr)Convert.ToUInt32(GameSession.CurrentWindowHandle, 16);
+        }
     }
 }
