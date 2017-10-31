@@ -172,6 +172,7 @@ namespace AutoMineSweeper
                                         if (neighbor.Value != null && neighbor.Value.Status == CellStatus.Idle)
                                         {
                                             neighbor.Value.RightClick();
+                                            MineCount--;
                                             neighbor.Value.Status = CellStatus.Flag;
                                         }
                                     }
@@ -191,7 +192,8 @@ namespace AutoMineSweeper
                             for (int j = 0; j < CellCount.Height; j++)
                             {
                                 var cell = GetCell(i, j);
-
+                                bool lastCell = (CellCount.Width - 1 == i) && (CellCount.Height - i == j);
+                                bool AddLeftMineElement = false;
                                 if (cell.Status >= CellStatus._1 && cell.Status <= CellStatus._8)
                                 {
                                     Dictionary<ListStruct, ElementDetail> new_element_dict = new Dictionary<ListStruct, ElementDetail>((new ListStructComparer()));
@@ -308,6 +310,15 @@ namespace AutoMineSweeper
                                                     {
                                                         break;
                                                     }
+                                                    if (lastCell && !AddLeftMineElement)
+                                                    {
+                                                        new_element_dict.Add(new ListStruct(GetUnknownCellList()), new ElementDetail(MineCount));
+                                                        AddLeftMineElement = true;
+                                                    }
+                                                    else if(AddLeftMineElement)
+                                                    {
+                                                        break;
+                                                    }
                                                 }
                                             }
                                         }
@@ -395,6 +406,7 @@ namespace AutoMineSweeper
         private void ClickStartButton()
         {
             refreshFields = true;
+            MineCount = 99;
             Operator.Instance.LeftClick(ButtonRect.Center().X, ButtonRect.Center().Y);
         }
 
@@ -467,8 +479,25 @@ namespace AutoMineSweeper
             {
                 var cell = GetCellByIndex(i);
                 cell.RightClick();
+                MineCount--;
                 cell.Status = CellStatus.Flag;
             }
+        }
+
+        private List<int> GetUnknownCellList()
+        {
+            List<int> l = new List<int>();
+            for (int j = 0; j < CellCount.Height; j++)
+            {
+                for (int i = 0; i < CellCount.Width; i++)
+                {
+                    if (Cells[i, j].Status == CellStatus.Idle)
+                    {
+                        l.Add(Cells[i, j].Index);
+                    }
+                }
+            }
+            return l;
         }
     }
 }
