@@ -21,7 +21,7 @@
         {
             Operator.Instance.Init();
 
-            var field = new Field(true);
+            var field = new Field(false);
             field.Resolve();
 
             Operator.Instance.Dispose();

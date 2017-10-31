@@ -28,6 +28,8 @@ namespace AutoMineSweeper
 
         private bool ReadMemory { get; set; }
 
+        private bool refreshFields = false;
+
         public Field(bool readMemory)
         {
             ReadMemory = readMemory;
@@ -53,6 +55,7 @@ namespace AutoMineSweeper
                     {
                         Rect = new Rectangle(CellStart.X + i * CellSize.Width, CellStart.Y + j * CellSize.Height, CellSize.Width, CellSize.Height)
                     };
+                    cell.Index = CellCount.Width * j + i;
                     Cells[i, j] = cell;
                 }
             }
@@ -169,6 +172,7 @@ namespace AutoMineSweeper
                                         if (neighbor.Value != null && neighbor.Value.Status == CellStatus.Idle)
                                         {
                                             neighbor.Value.RightClick();
+                                            MineCount--;
                                             neighbor.Value.Status = CellStatus.Flag;
                                         }
                                     }
@@ -180,6 +184,158 @@ namespace AutoMineSweeper
 
                     everFound = everFound || found;
 
+                    if (true)
+                    {
+                        Dictionary<ListStruct, ElementDetail> totalDict = new Dictionary<ListStruct, ElementDetail>(new ListStructComparer());
+                        for (int i = 0; i < CellCount.Width; i++)
+                        {
+                            for (int j = 0; j < CellCount.Height; j++)
+                            {
+                                var cell = GetCell(i, j);
+                                bool lastCell = (CellCount.Width - 1 == i) && (CellCount.Height - i == j);
+                                bool AddLeftMineElement = false;
+                                if (cell.Status >= CellStatus._1 && cell.Status <= CellStatus._8)
+                                {
+                                    Dictionary<ListStruct, ElementDetail> new_element_dict = new Dictionary<ListStruct, ElementDetail>((new ListStructComparer()));
+                                    Dictionary<ListStruct, ElementDetail> curr_element_dict = new Dictionary<ListStruct, ElementDetail>((new ListStructComparer()));
+                                    Dictionary<ListStruct, ElementDetail> checked_element_dict = new Dictionary<ListStruct, ElementDetail>((new ListStructComparer()));
+                                    var unknownList = new ListStruct(cell.GetNeighborsList(CellStatus.Idle));
+                                    int leftMineCount = (int)cell.Status - cell.GetCountInNeighbors(CellStatus.Flag);
+                                    if (leftMineCount > 0 && !totalDict.ContainsKey(unknownList))
+                                    {
+                                        bool firstRound = true;
+                                        new_element_dict.Add(unknownList, new ElementDetail(leftMineCount));
+                                        while (firstRound || !found && (new_element_dict.Count > 0 || checked_element_dict.Count > 0))
+                                        {
+
+                                            firstRound = false;
+                                            foreach (var kvp in checked_element_dict)
+                                            {
+                                                if (!totalDict.ContainsKey(kvp.Key))
+                                                {
+                                                    totalDict.Add(kvp.Key, kvp.Value);
+                                                }
+                                                if (curr_element_dict.ContainsKey(kvp.Key))
+                                                {
+                                                    curr_element_dict.Remove(kvp.Key);
+                                                }
+                                            }
+                                            foreach (var kvp in new_element_dict)
+                                            {
+                                                if (!curr_element_dict.ContainsKey(kvp.Key))
+                                                {
+                                                    curr_element_dict.Add(kvp.Key, kvp.Value);
+                                                }
+                                            }
+                                            new_element_dict = new Dictionary<ListStruct, ElementDetail>((new ListStructComparer()));
+                                            checked_element_dict = new Dictionary<ListStruct, ElementDetail>((new ListStructComparer()));
+                                            foreach (var kvp_curr in curr_element_dict)
+                                            {
+                                                bool findChildOrParent = false;
+                                                foreach (var kvp in totalDict)
+                                                {
+                                                    if (kvp.Value.abondoned)
+                                                    {
+                                                        continue;
+                                                    }
+                                                    var curr_element = kvp_curr.Key;
+                                                    ListDiff listDiff = new ListDiff(curr_element.list, kvp.Key.list);
+                                                    if (listDiff.Diff1.Count > 0)
+                                                    {
+                                                        if (listDiff.Diff1.Count == kvp_curr.Value.unknownCount - kvp.Value.unknownCount)
+                                                        {
+                                                            AllCellIndexClickRight(listDiff.Diff1);
+                                                            found = true;
+                                                            break;
+                                                        }
+                                                        if (listDiff.Diff2.Count == 0)
+                                                        {
+                                                            if (kvp_curr.Value.unknownCount == kvp.Value.unknownCount)
+                                                            {
+                                                                AllCellIndexClickLeft(listDiff.Diff1);
+                                                                found = true;
+                                                                break;
+                                                            }
+                                                            else
+                                                            {
+                                                                ListStruct diffListStruct = new ListStruct(listDiff.Diff1);
+                                                                if (!totalDict.ContainsKey(diffListStruct))
+                                                                {
+                                                                    findChildOrParent = true;
+                                                                    new_element_dict.Add(diffListStruct, new ElementDetail(Math.Abs(kvp_curr.Value.unknownCount - kvp.Value.unknownCount)));
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        if (listDiff.Diff2.Count == kvp.Value.unknownCount - kvp_curr.Value.unknownCount)
+                                                        {
+                                                            AllCellIndexClickRight(listDiff.Diff2);
+                                                            found = true;
+                                                            break;
+                                                        }
+                                                        else if (kvp_curr.Value.unknownCount == kvp.Value.unknownCount)
+                                                        {
+                                                            AllCellIndexClickLeft(listDiff.Diff2);
+                                                            found = true;
+                                                            break;
+                                                        }
+                                                        else
+                                                        {
+                                                            ListStruct diffListStruct = new ListStruct(listDiff.Diff2);
+                                                            if (!totalDict.ContainsKey(diffListStruct))
+                                                            {
+                                                                findChildOrParent = true;
+                                                                kvp.Value.abondoned = true;
+                                                                new_element_dict.Add(diffListStruct, new ElementDetail(Math.Abs(kvp_curr.Value.unknownCount - kvp.Value.unknownCount)));
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                if (found)
+                                                {
+                                                    break;
+                                                }
+
+                                                else
+                                                {
+                                                    if (!checked_element_dict.ContainsKey(kvp_curr.Key))
+                                                    {
+                                                        checked_element_dict.Add(kvp_curr.Key, kvp_curr.Value);
+                                                    }
+                                                    if (findChildOrParent)
+                                                    {
+                                                        break;
+                                                    }
+                                                    if (lastCell && !AddLeftMineElement)
+                                                    {
+                                                        new_element_dict.Add(new ListStruct(GetUnknownCellList()), new ElementDetail(MineCount));
+                                                        AddLeftMineElement = true;
+                                                    }
+                                                    else if(AddLeftMineElement)
+                                                    {
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                if (found)
+                                {
+                                    break;
+                                }
+                            }
+                            if (found)
+                            {
+                                break;
+                            }
+                        }
+                    }
+
                     if (!found)
                     {
                         //click random field
@@ -187,10 +343,11 @@ namespace AutoMineSweeper
                         int j = random.Next(0, CellCount.Height);
 
                         var cell = GetCell(i, j);
-                        if (cell.Status == CellStatus.Idle)
+                        while (cell.Status != CellStatus.Idle)
                         {
-                            cell.LeftClick();
+                            cell = GetCellByIndex((cell.Index + 1) % (CellCount.Height * CellCount.Width));
                         }
+                        cell.LeftClick();
                     }
                 }
 
@@ -215,6 +372,13 @@ namespace AutoMineSweeper
                 for (int j = 0; j < CellCount.Height; j++)
                 {
                     var cell = GetCell(i, j);
+                    if (!refreshFields)
+                    {
+                        if ((cell.Status >= CellStatus._1 && cell.Status <= CellStatus._8) || cell.Status == CellStatus.Flag)
+                        {
+                            continue;
+                        }
+                    }
 
                     var cellImage = screenshot.Clone(cell.Rect, screenshot.PixelFormat);
 
@@ -241,6 +405,8 @@ namespace AutoMineSweeper
 
         private void ClickStartButton()
         {
+            refreshFields = true;
+            MineCount = 99;
             Operator.Instance.LeftClick(ButtonRect.Center().X, ButtonRect.Center().Y);
         }
 
@@ -291,6 +457,47 @@ namespace AutoMineSweeper
                     }
                 }
             }
+        }
+
+        private Cell GetCellByIndex(int index)
+        {
+            int i = index % CellCount.Width;
+            int j = index / CellCount.Width;
+            return Cells[i, j];
+        }
+
+        private void AllCellIndexClickLeft(List<int> l)
+        {
+            foreach (int i in l)
+            {
+                GetCellByIndex(i).LeftClick();
+            }
+        }
+        private void AllCellIndexClickRight(List<int> l)
+        {
+            foreach (int i in l)
+            {
+                var cell = GetCellByIndex(i);
+                cell.RightClick();
+                MineCount--;
+                cell.Status = CellStatus.Flag;
+            }
+        }
+
+        private List<int> GetUnknownCellList()
+        {
+            List<int> l = new List<int>();
+            for (int j = 0; j < CellCount.Height; j++)
+            {
+                for (int i = 0; i < CellCount.Width; i++)
+                {
+                    if (Cells[i, j].Status == CellStatus.Idle)
+                    {
+                        l.Add(Cells[i, j].Index);
+                    }
+                }
+            }
+            return l;
         }
     }
 }
