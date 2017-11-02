@@ -24,11 +24,16 @@ namespace AutoMineSweeper
 
         public Bitmap LoseButton { get; set; }
 
-        public Dictionary<CellStatus, Bitmap> CellTemplates { get; set; } = new Dictionary<CellStatus, Bitmap>();
+        public Dictionary<CellStatus, BitmapInfo> CellTemplates { get; set; } = new Dictionary<CellStatus, BitmapInfo>();
 
         private bool ReadMemory { get; set; }
 
-        private bool refreshFields = false;
+        private BitmapInfo LoseButtonbmi;
+
+        private Bitmap screenshot;
+
+        private List<int> lastClickIndex = new List<int>();
+        private Dictionary<int, bool> scaned_list = new Dictionary<int, bool>();
 
         public Field(bool readMemory)
         {
@@ -109,7 +114,7 @@ namespace AutoMineSweeper
                 {
                     string fileName = $"CellTemplates/{status}.png";
                     var image = new Bitmap(fileName);
-                    CellTemplates[status] = image;
+                    CellTemplates[status] = new BitmapInfo(image);
                 }
                 catch (Exception)
                 {
@@ -117,6 +122,7 @@ namespace AutoMineSweeper
             }
 
             LoseButton = new Bitmap("ButtonTemplates/Lose.png");
+            LoseButtonbmi = new BitmapInfo(LoseButton);
 
             var random = new Random((int)DateTime.Now.ToFileTimeUtc());
 
@@ -143,6 +149,7 @@ namespace AutoMineSweeper
                                 if (idleCount > 0 && flagCount == (int)cell.Status)
                                 {
                                     cell.DoubleClick();
+                                    ClickRecord(cell.Index);
                                     found = true;
                                 }
                             }
@@ -184,7 +191,7 @@ namespace AutoMineSweeper
 
                     everFound = everFound || found;
 
-                    if (true)
+                    if (!found)
                     {
                         Dictionary<ListStruct, ElementDetail> totalDict = new Dictionary<ListStruct, ElementDetail>(new ListStructComparer());
                         for (int i = 0; i < CellCount.Width; i++)
@@ -227,8 +234,8 @@ namespace AutoMineSweeper
                                                     curr_element_dict.Add(kvp.Key, kvp.Value);
                                                 }
                                             }
-                                            new_element_dict = new Dictionary<ListStruct, ElementDetail>((new ListStructComparer()));
-                                            checked_element_dict = new Dictionary<ListStruct, ElementDetail>((new ListStructComparer()));
+                                            new_element_dict.Clear();
+                                            checked_element_dict.Clear();
                                             foreach (var kvp_curr in curr_element_dict)
                                             {
                                                 bool findChildOrParent = false;
@@ -348,6 +355,7 @@ namespace AutoMineSweeper
                             cell = GetCellByIndex((cell.Index + 1) % (CellCount.Height * CellCount.Width));
                         }
                         cell.LeftClick();
+                        ClickRecord(cell.Index);
                     }
                 }
 
@@ -358,56 +366,46 @@ namespace AutoMineSweeper
         //take screenshot, update cell status
         private bool Scan()
         {
-            var screenshot = Operator.Instance.GetScreenshot();
+            screenshot = Operator.Instance.GetScreenshot();
 
             //check if lose
             var buttonImage = screenshot.Clone(ButtonRect, screenshot.PixelFormat);
-            if (ImageUtils.CompareMemCmp(buttonImage, LoseButton))
+            if (ImageUtils.CompareMemCmp(LoseButtonbmi, buttonImage))
             {
                 return false;
             }
-
-            for (int i = 0; i < CellCount.Width; i++)
+            scaned_list.Clear();
+            if (lastClickIndex.Count > 0)
             {
-                for (int j = 0; j < CellCount.Height; j++)
+                foreach (int i in lastClickIndex)
                 {
-                    var cell = GetCell(i, j);
-                    if (!refreshFields)
-                    {
-                        if ((cell.Status >= CellStatus._1 && cell.Status <= CellStatus._8) || cell.Status == CellStatus.Flag)
-                        {
-                            continue;
-                        }
-                    }
-
-                    var cellImage = screenshot.Clone(cell.Rect, screenshot.PixelFormat);
-
-                    var pair = CellTemplates
-                        .Where(x => ImageUtils.CompareMemCmp(x.Value, cellImage))
-                        .Select(x => (KeyValuePair<CellStatus, Bitmap>?)x)
-                        .FirstOrDefault();
-
-                    if (pair == null)
-                    {
-                        Console.WriteLine("New Cell");
-                        Debug.Assert(false, "New Cell Image Found");
-                        cellImage.Save($"CellTemplates/{ Guid.NewGuid() }.png", ImageFormat.Png);
-                        return false;
-                    }
-
-                    cell.Status = pair.Value.Key;
+                    ScanCell(GetCellByIndex(i));
                 }
             }
+            else
+            {
+                
+            }
 
+            
+
+            lastClickIndex.Clear();
 
             return true;
         }
 
         private void ClickStartButton()
         {
-            refreshFields = true;
             MineCount = 99;
+            scaned_list.Clear();
             Operator.Instance.LeftClick(ButtonRect.Center().X, ButtonRect.Center().Y);
+            for (int i = 0; i < CellCount.Width; i++)
+            {
+                for (int j = 0; j < CellCount.Height; j++)
+                {
+                    Cells[i, j].Status = CellStatus.Idle;
+                }
+            }
         }
 
         private IntPtr BaseAddress;
@@ -452,6 +450,7 @@ namespace AutoMineSweeper
                     {
                         var cell = GetCell(i, j);
                         cell.LeftClick();
+                        ClickRecord(cell.Index);
                         //read again
                         bytes = MemoryUtils.ReadProcessMemory(hWnd, BaseAddress, (UInt32)(this.CellCount.Width * MemoryLineSize));
                     }
@@ -471,6 +470,7 @@ namespace AutoMineSweeper
             foreach (int i in l)
             {
                 GetCellByIndex(i).LeftClick();
+                ClickRecord(i);
             }
         }
         private void AllCellIndexClickRight(List<int> l)
@@ -498,6 +498,62 @@ namespace AutoMineSweeper
                 }
             }
             return l;
+        }
+
+        private void ClickRecord(int index)
+        {
+            lastClickIndex.Add(index);
+        }
+
+        private void ScanCell(Cell cell)
+        {
+            if (scaned_list.ContainsKey(cell.Index))
+            {
+                return;
+            }
+            else
+            {
+                scaned_list.Add(cell.Index, true);
+            }
+
+            if ((cell.Status >= CellStatus._0 && cell.Status <= CellStatus._8) || cell.Status == CellStatus.Flag)
+            {
+                
+            }
+            else
+            {
+                var cellImage = screenshot.Clone(cell.Rect, screenshot.PixelFormat);
+
+                var pair = CellTemplates
+                    .Where(x => ImageUtils.CompareMemCmp(x.Value, cellImage))
+                    .Select(x => (KeyValuePair<CellStatus, BitmapInfo>?)x)
+                    .FirstOrDefault();
+
+                if (pair == null)
+                {
+                    Console.WriteLine("New Cell");
+                    Debug.Assert(false, "New Cell Image Found");
+                    cellImage.Save($"CellTemplates/{ Guid.NewGuid() }.png", ImageFormat.Png);
+                    return;
+                }
+
+                cell.Status = pair.Value.Key;
+            }
+
+            if (cell.Status == CellStatus.Idle)
+            {
+                return;
+            }
+            else
+            {
+                foreach (var kvp in cell.Neighbors)
+                {
+                    if (kvp.Value != null)
+                    {
+                        ScanCell(kvp.Value);
+                    }
+                }
+            }
         }
     }
 }
