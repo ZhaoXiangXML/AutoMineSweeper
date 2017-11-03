@@ -34,6 +34,7 @@ namespace AutoMineSweeper
 
         private List<int> lastClickIndex = new List<int>();
         private Dictionary<int, bool> scaned_list = new Dictionary<int, bool>();
+        private int num_cell_count = 0;
 
         public Field(bool readMemory)
         {
@@ -194,15 +195,17 @@ namespace AutoMineSweeper
                     if (!found)
                     {
                         Dictionary<ListStruct, ElementDetail> totalDict = new Dictionary<ListStruct, ElementDetail>(new ListStructComparer());
+                        int checked_num_count = 0;
                         for (int i = 0; i < CellCount.Width; i++)
                         {
                             for (int j = 0; j < CellCount.Height; j++)
                             {
                                 var cell = GetCell(i, j);
-                                bool lastCell = (CellCount.Width - 1 == i) && (CellCount.Height - i == j);
+                                bool lastCell = (num_cell_count - checked_num_count == 1);
                                 bool AddLeftMineElement = false;
                                 if (cell.Status >= CellStatus._1 && cell.Status <= CellStatus._8)
                                 {
+                                    checked_num_count++;
                                     Dictionary<ListStruct, ElementDetail> new_element_dict = new Dictionary<ListStruct, ElementDetail>((new ListStructComparer()));
                                     Dictionary<ListStruct, ElementDetail> curr_element_dict = new Dictionary<ListStruct, ElementDetail>((new ListStructComparer()));
                                     Dictionary<ListStruct, ElementDetail> checked_element_dict = new Dictionary<ListStruct, ElementDetail>((new ListStructComparer()));
@@ -317,7 +320,8 @@ namespace AutoMineSweeper
                                                     {
                                                         break;
                                                     }
-                                                    if (lastCell && !AddLeftMineElement)
+                                                    bool add_all = lastCell && !AddLeftMineElement;
+                                                    if (add_all)
                                                     {
                                                         new_element_dict.Add(new ListStruct(GetUnknownCellList()), new ElementDetail(MineCount));
                                                         AddLeftMineElement = true;
@@ -397,6 +401,7 @@ namespace AutoMineSweeper
         private void ClickStartButton()
         {
             MineCount = 99;
+            num_cell_count = 0;
             scaned_list.Clear();
             Operator.Instance.LeftClick(ButtonRect.Center().X, ButtonRect.Center().Y);
             for (int i = 0; i < CellCount.Width; i++)
@@ -538,6 +543,10 @@ namespace AutoMineSweeper
                 }
 
                 cell.Status = pair.Value.Key;
+                if (pair.Value.Key >= CellStatus._0 && pair.Value.Key <= CellStatus._8)
+                {
+                    num_cell_count++;
+                }
             }
 
             if (cell.Status == CellStatus.Idle)
